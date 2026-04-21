@@ -1,0 +1,12 @@
+# Build artifacts
+/target/
+
+# Generated kernel header (system-specific, rebuilt by build.rs)
+bpf/include/vmlinux.h
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
