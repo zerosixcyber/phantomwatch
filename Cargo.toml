@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+libbpf-rs = "0.25"
+plain = "0.2"
+
+[build-dependencies]
+libbpf-cargo = "0.25"
