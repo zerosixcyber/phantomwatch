@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    - -Ibpf/include
+    - --target=bpf
+    - -D__TARGET_ARCH_x86
+    - -g
