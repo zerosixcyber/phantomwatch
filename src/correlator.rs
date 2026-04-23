@@ -1,7 +1,9 @@
+use serde::Serialize;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::time::Instant;
 
+#[allow(dead_code)]
 pub struct ProcessState {
     pub pid: u32,
     pub ppid: u32,
@@ -36,6 +38,7 @@ impl ProcessState {
     }
 }
 
+#[derive(Serialize)]
 pub struct Alert {
     pub rule_id: String,
     pub rule_name: String,

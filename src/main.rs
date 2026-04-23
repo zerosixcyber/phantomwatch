@@ -7,6 +7,7 @@ mod correlator;
 
 use skel::*;
 
+use serde_json;
 use std::mem::MaybeUninit;
 use std::time::Duration;
 
@@ -71,16 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(alert) =
                     corr.handle_exec(event.pid, event.ppid, event.uid, &comm, &filename)
                 {
-                    println!(
-                        ">>> ALERT [{}] {} | severity={} | pid={} uid={} comm={} | {}",
-                        alert.rule_id,
-                        alert.rule_name,
-                        alert.severity,
-                        alert.pid,
-                        alert.uid,
-                        alert.comm,
-                        alert.details,
-                    );
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json)
                 }
             }
             2 => {
