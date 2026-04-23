@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
 
-
 #include "include/vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -9,33 +8,105 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-    struct {
-        __uint(type, BPF_MAP_TYPE_RINGBUF);
-        __uint(max_entries, 256 * 1024);
-    } events SEC(".maps");
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} events SEC(".maps");
 
-    SEC("tracepoint/syscalls/sys_enter_execve")
-    int handle_execve(struct trace_event_raw_sys_enter *ctx)
-    {
-        struct pw_event *e;
-        struct task_struct *task;
+SEC("tracepoint/syscalls/sys_enter_execve")
+int handle_execve(struct trace_event_raw_sys_enter *ctx)
+{
+	struct pw_event *e;
+	struct task_struct *task;
 
-        e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-        if (!e)
-            return 0;
+	e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e)
+		return 0;
 
-        e->timestamp_ns = bpf_ktime_get_ns();
-        e->event_type = PW_EVT_EXEC;
-        e->pid = bpf_get_current_pid_tgid() >> 32;
-        e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+	e->timestamp_ns = bpf_ktime_get_ns();
+	e->event_type = PW_EVT_EXEC;
+	e->pid = bpf_get_current_pid_tgid() >> 32;
+	e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
 
-        task = (struct task_struct *)bpf_get_current_task();
-        e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+	task = (struct task_struct *)bpf_get_current_task();
+	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
 
-        bpf_get_current_comm(&e->comm, sizeof(e->comm));
-        bpf_probe_read_user_str(e->filename, sizeof(e->filename),
-            (const char *)ctx->args[0]);
+	bpf_get_current_comm(&e->comm, sizeof(e->comm));
+	bpf_probe_read_user_str(e->exec.filename,
+				sizeof(e->exec.filename),
+				(const char *)ctx->args[0]);
 
-        bpf_ringbuf_submit(e, 0);
-        return 0;
-    }
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_connect")
+int handle_connect(struct trace_event_raw_sys_enter *ctx)
+{
+	struct pw_event *e;
+	struct task_struct *task;
+	struct sockaddr_in addr = {};
+
+	bpf_probe_read_user(&addr, sizeof(addr),
+			    (void *)ctx->args[1]);
+
+	if (addr.sin_family != 2) /* AF_INET */
+		return 0;
+
+	__u32 ip = addr.sin_addr.s_addr;
+
+	/* skip loopback 127.x.x.x */
+	if ((ip & 0xFF) == 127)
+		return 0;
+
+	e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e)
+		return 0;
+
+	e->timestamp_ns = bpf_ktime_get_ns();
+	e->event_type = PW_EVT_CONNECT;
+	e->pid = bpf_get_current_pid_tgid() >> 32;
+	e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+	task = (struct task_struct *)bpf_get_current_task();
+	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+	bpf_get_current_comm(&e->comm, sizeof(e->comm));
+	e->connect.addr_v4 = ip;
+	e->connect.port = __builtin_bswap16(addr.sin_port);
+	e->connect.family = addr.sin_family;
+
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_dup2")
+int handle_dup2(struct trace_event_raw_sys_enter *ctx)
+{
+	struct pw_event *e;
+	struct task_struct *task;
+	__s32 newfd = (__s32)ctx->args[1];
+
+	/* only care about stdin(0), stdout(1), stderr(2) */
+	if (newfd > 2)
+		return 0;
+
+	e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e)
+		return 0;
+
+	e->timestamp_ns = bpf_ktime_get_ns();
+	e->event_type = PW_EVT_DUP;
+	e->pid = bpf_get_current_pid_tgid() >> 32;
+	e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+	task = (struct task_struct *)bpf_get_current_task();
+	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+	bpf_get_current_comm(&e->comm, sizeof(e->comm));
+	e->dup.oldfd = (__s32)ctx->args[0];
+	e->dup.newfd = newfd;
+
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}

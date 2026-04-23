@@ -24,7 +24,7 @@ struct PwEvent {
     ppid: u32,
     uid: u32,
     comm: [u8; 16],
-    filename: [u8; 256],
+    payload: [u8; 256],
 }
 
 unsafe impl Plain for PwEvent {}
@@ -39,14 +39,49 @@ fn handle_event(data: &[u8]) -> i32 {
         .unwrap_or("?")
         .trim_end_matches('\0');
 
-    let filename = std::str::from_utf8(&event.filename)
-        .unwrap_or("?")
-        .trim_end_matches('\0');
-
-    println!(
-        "[EXEC] pid={} ppid={} uid={} comm={:16} file={}",
-        event.pid, event.ppid, event.uid, comm, filename,
-    );
+    match event.event_type {
+        1 => {
+            let filename = std::str::from_utf8(&event.payload)
+                .unwrap_or("?")
+                .trim_end_matches('\0');
+            println!(
+                "[EXEC] pid={} ppid={} uid={} comm={} file={}",
+                event.pid, event.ppid, event.uid, comm, filename,
+            );
+        }
+        2 => {
+            let ip = [
+                event.payload[0],
+                event.payload[1],
+                event.payload[2],
+                event.payload[3],
+            ];
+            let port = u16::from_le_bytes([event.payload[4], event.payload[5]]);
+            println!(
+                "[CONNECT] pid={} uid={} comm={} dest={}.{}.{}.{}:{}",
+                event.pid, event.uid, comm, ip[0], ip[1], ip[2], ip[3], port,
+            );
+        }
+        3 => {
+            let oldfd = i32::from_le_bytes([
+                event.payload[0],
+                event.payload[1],
+                event.payload[2],
+                event.payload[3],
+            ]);
+            let newfd = i32::from_le_bytes([
+                event.payload[4],
+                event.payload[5],
+                event.payload[6],
+                event.payload[7],
+            ]);
+            println!(
+                "[DUP2] pid={} uid={} comm={} oldfd={} newfd={}",
+                event.pid, event.uid, comm, oldfd, newfd,
+            );
+        }
+        _ => {}
+    }
 
     0
 }

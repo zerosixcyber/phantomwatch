@@ -7,6 +7,7 @@
 enum pw_event_type {
     PW_EVT_EXEC = 1,
     PW_EVT_CONNECT = 2,
+    PW_EVT_DUP = 3,
 };
 
 
@@ -17,7 +18,23 @@ struct pw_event {
     __u32 ppid;
     __u32 uid;
     char comm[16];
-    char filename[MAX_PATH_LEN];
+
+    union {
+        struct {
+            char filename[MAX_PATH_LEN];
+        } exec;
+
+        struct {
+            __u32 addr_v4;
+            __u16 port;
+            __u16 family;
+        } connect;
+
+        struct {
+            __s32 oldfd;
+            __s32 newfd;
+        } dup;
+    };
 };
 
 #endif
