@@ -3,6 +3,7 @@
 mod skel {
     include!(concat!(env!("OUT_DIR"), "/exec_tracker.skel.rs"));
 }
+mod correlator;
 
 use skel::*;
 
@@ -29,63 +30,6 @@ struct PwEvent {
 
 unsafe impl Plain for PwEvent {}
 
-fn handle_event(data: &[u8]) -> i32 {
-    let event = match plain::from_bytes::<PwEvent>(data) {
-        Ok(e) => e,
-        Err(_) => return 0,
-    };
-
-    let comm = std::str::from_utf8(&event.comm)
-        .unwrap_or("?")
-        .trim_end_matches('\0');
-
-    match event.event_type {
-        1 => {
-            let filename = std::str::from_utf8(&event.payload)
-                .unwrap_or("?")
-                .trim_end_matches('\0');
-            println!(
-                "[EXEC] pid={} ppid={} uid={} comm={} file={}",
-                event.pid, event.ppid, event.uid, comm, filename,
-            );
-        }
-        2 => {
-            let ip = [
-                event.payload[0],
-                event.payload[1],
-                event.payload[2],
-                event.payload[3],
-            ];
-            let port = u16::from_le_bytes([event.payload[4], event.payload[5]]);
-            println!(
-                "[CONNECT] pid={} uid={} comm={} dest={}.{}.{}.{}:{}",
-                event.pid, event.uid, comm, ip[0], ip[1], ip[2], ip[3], port,
-            );
-        }
-        3 => {
-            let oldfd = i32::from_le_bytes([
-                event.payload[0],
-                event.payload[1],
-                event.payload[2],
-                event.payload[3],
-            ]);
-            let newfd = i32::from_le_bytes([
-                event.payload[4],
-                event.payload[5],
-                event.payload[6],
-                event.payload[7],
-            ]);
-            println!(
-                "[DUP2] pid={} uid={} comm={} oldfd={} newfd={}",
-                event.pid, event.uid, comm, oldfd, newfd,
-            );
-        }
-        _ => {}
-    }
-
-    0
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let builder = ExecTrackerSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
@@ -95,11 +39,96 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("phantomwatch running. Press Ctrl-C to stop.");
 
+    let correlator = std::sync::Arc::new(std::sync::Mutex::new(correlator::Correlator::new(30)));
+
+    let corr = correlator.clone();
     let mut rb_builder = RingBufferBuilder::new();
-    rb_builder.add(&skel.maps.events, handle_event)?;
+    rb_builder.add(&skel.maps.events, move |data: &[u8]| {
+        let event = match plain::from_bytes::<PwEvent>(data) {
+            Ok(e) => e,
+            Err(_) => return 0,
+        };
+
+        let comm = std::str::from_utf8(&event.comm)
+            .unwrap_or("?")
+            .trim_end_matches('\0')
+            .to_string();
+
+        let mut corr = corr.lock().unwrap();
+
+        match event.event_type {
+            1 => {
+                let filename = std::str::from_utf8(&event.payload)
+                    .unwrap_or("?")
+                    .trim_end_matches('\0')
+                    .to_string();
+
+                eprintln!(
+                    "[EXEC] pid={} ppid={} comm={} file={}",
+                    event.pid, event.ppid, comm, filename,
+                );
+
+                if let Some(alert) =
+                    corr.handle_exec(event.pid, event.ppid, event.uid, &comm, &filename)
+                {
+                    println!(
+                        ">>> ALERT [{}] {} | severity={} | pid={} uid={} comm={} | {}",
+                        alert.rule_id,
+                        alert.rule_name,
+                        alert.severity,
+                        alert.pid,
+                        alert.uid,
+                        alert.comm,
+                        alert.details,
+                    );
+                }
+            }
+            2 => {
+                let ip = std::net::Ipv4Addr::new(
+                    event.payload[0],
+                    event.payload[1],
+                    event.payload[2],
+                    event.payload[3],
+                );
+                let port = u16::from_le_bytes([event.payload[4], event.payload[5]]);
+
+                eprintln!(
+                    "[CONNECT] pid={} comm={} dest={}:{}",
+                    event.pid, comm, ip, port,
+                );
+
+                corr.handle_connect(event.pid, event.ppid, event.uid, &comm, ip, port);
+            }
+            3 => {
+                let oldfd = i32::from_le_bytes([
+                    event.payload[0],
+                    event.payload[1],
+                    event.payload[2],
+                    event.payload[3],
+                ]);
+                let newfd = i32::from_le_bytes([
+                    event.payload[4],
+                    event.payload[5],
+                    event.payload[6],
+                    event.payload[7],
+                ]);
+
+                eprintln!(
+                    "[DUP2] pid={} comm={} oldfd={} newfd={}",
+                    event.pid, comm, oldfd, newfd,
+                );
+
+                corr.handle_dup2(event.pid, event.ppid, event.uid, &comm, newfd);
+            }
+            _ => {}
+        }
+
+        0
+    })?;
     let rb = rb_builder.build()?;
 
     loop {
         rb.poll(Duration::from_millis(100))?;
+        correlator.lock().unwrap().cleanup_stale();
     }
 }
