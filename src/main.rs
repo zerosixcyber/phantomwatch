@@ -7,6 +7,7 @@ mod correlator;
 
 use skel::*;
 
+use clap::{Parser, Subcommand};
 use serde_json;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -16,6 +17,23 @@ use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::Skel;
 use libbpf_rs::skel::SkelBuilder;
 use plain::Plain;
+
+#[derive(Parser)]
+#[command(name = "phantomwatch")]
+#[command(about = "eBPF-based fileless malware detector for Linux")]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the detector
+    Run,
+    /// Check kernel compatibility
+    Check,
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -31,7 +49,43 @@ struct PwEvent {
 
 unsafe impl Plain for PwEvent {}
 
+fn check_kernel() {
+    print!("Kernel: ");
+    match std::fs::read_to_string("/proc/version") {
+        Ok(v) => println!("{}", v.split_whitespace().nth(2).unwrap_or("unknown")),
+        Err(_) => println!("unknown"),
+    }
+
+    print!("BTF:     ");
+    if std::path::Path::new("/sys/kernel/btf/vmlinux").exists() {
+        println!("available");
+    } else {
+        println!("NOT available (required)");
+    }
+
+    print!("BPF-LSM: ");
+    match std::fs::read_to_string("/sys/kernel/security/lsm") {
+        Ok(lsm) => {
+            if lsm.contains("bpf") {
+                print!("enabled ({})", lsm.trim());
+            } else {
+                println!("NOT enabled (add 'lsm=...,bpf' to boot params)");
+            }
+        }
+        Err(_) => println!("unknown"),
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Check => {
+            check_kernel();
+            return Ok(());
+        }
+        Commands::Run => {}
+    }
     let builder = ExecTrackerSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
     let open_skel = builder.open(&mut open_object)?;
