@@ -11,6 +11,8 @@ use clap::{Parser, Subcommand};
 use serde_json;
 use std::mem::MaybeUninit;
 use std::time::Duration;
+use tracing::{debug, info};
+use tracing_subscriber::EnvFilter;
 
 use libbpf_rs::RingBufferBuilder;
 use libbpf_rs::skel::OpenSkel;
@@ -79,6 +81,13 @@ fn check_kernel() {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .with_target(false)
+        .init();
+
     match cli.command {
         Commands::Check => {
             check_kernel();
@@ -92,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut skel = open_skel.load()?;
     skel.attach()?;
 
-    eprintln!("phantomwatch running. Press Ctrl-C to stop.");
+    info!("phantomwatch running. Press Ctrl-C to stop.");
 
     let correlator = std::sync::Arc::new(std::sync::Mutex::new(correlator::Correlator::new(30)));
 
@@ -118,9 +127,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .trim_end_matches('\0')
                     .to_string();
 
-                eprintln!(
-                    "[EXEC] pid={} ppid={} comm={} file={}",
-                    event.pid, event.ppid, comm, filename,
+                debug!(
+                    pid = event.pid,
+                    ppid = event.ppid,
+                    comm = comm,
+                    file = filename,
+                    "exec event"
                 );
 
                 if let Some(alert) =
@@ -139,9 +151,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 let port = u16::from_le_bytes([event.payload[4], event.payload[5]]);
 
-                eprintln!(
-                    "[CONNECT] pid={} comm={} dest={}:{}",
-                    event.pid, comm, ip, port,
+                debug!(
+                    pid = event.pid,
+                    comm = comm,
+                    dest = format!("{}:{}", ip, port),
+                    "connect event"
                 );
 
                 corr.handle_connect(event.pid, event.ppid, event.uid, &comm, ip, port);
@@ -160,19 +174,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     event.payload[7],
                 ]);
 
-                eprintln!(
-                    "[DUP2] pid={} comm={} oldfd={} newfd={}",
-                    event.pid, comm, oldfd, newfd,
+                debug!(
+                    pid = event.pid,
+                    comm = comm,
+                    oldfd = oldfd,
+                    newfd = newfd,
+                    "dup2 event"
                 );
 
                 corr.handle_dup2(event.pid, event.ppid, event.uid, &comm, newfd);
             }
             4 => {
-                eprintln!("[MEMFD] pid={} comm={}", event.pid, comm,);
+                debug!(pid = event.pid, comm = comm, "memfd_create event");
                 corr.handle_memfd(event.pid, event.ppid, event.uid, &comm);
             }
             5 => {
-                eprintln!("[EXECVEAT] pid={} comm={} (AT_EMPTY_PATH)", event.pid, comm);
+                debug!(pid = event.pid, comm = comm, "execveat AT_EMPTY_PATH event");
                 if let Some(alert) = corr.handle_execveat(event.pid, event.ppid, event.uid, &comm) {
                     let json = serde_json::to_string(&alert).unwrap();
                     println!("{}", json);
