@@ -167,6 +167,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 corr.handle_dup2(event.pid, event.ppid, event.uid, &comm, newfd);
             }
+            4 => {
+                eprintln!("[MEMFD] pid={} comm={}", event.pid, comm,);
+                corr.handle_memfd(event.pid, event.ppid, event.uid, &comm);
+            }
+            5 => {
+                eprintln!("[EXECVEAT] pid={} comm={} (AT_EMPTY_PATH)", event.pid, comm);
+                if let Some(alert) = corr.handle_execveat(event.pid, event.ppid, event.uid, &comm) {
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json);
+                }
+            }
             _ => {}
         }
 

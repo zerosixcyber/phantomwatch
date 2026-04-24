@@ -110,3 +110,59 @@ int handle_dup2(struct trace_event_raw_sys_enter *ctx)
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_memfd_create")
+int handle_memfd_create(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_MEMFD;
+    e->pid = bpf_get_current_pid_tgid() >> 32;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->memfd.flags = (__u32)ctx->args[1];
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_execveat")
+int handle_execveat(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+    __u32 flags = (__u32)ctx->args[4];
+
+    /* AT_EMPTY_PATH = 0x1000 - this is the fileless indicator */
+    if (!(flags & 0x1000))
+        return 0;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_EXECVEAT;
+    e->pid = bpf_get_current_pid_tgid() >> 32;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->execveat.dirfd = (__s32)ctx->args[0];
+    e->execveat.flags = flags;
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}

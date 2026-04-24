@@ -17,6 +17,8 @@ pub struct ProcessState {
     pub stdin_redirected: bool,
     pub stdout_redirected: bool,
     pub stderr_redirected: bool,
+    pub has_memfd: bool,
+    pub exec_on_memfd: bool,
 }
 
 impl ProcessState {
@@ -34,6 +36,8 @@ impl ProcessState {
             stdin_redirected: false,
             stdout_redirected: false,
             stderr_redirected: false,
+            has_memfd: false,
+            exec_on_memfd: false,
         }
     }
 }
@@ -141,6 +145,31 @@ impl Correlator {
             uid,
             comm: comm.to_string(),
             details: format!("Reverse shell to {}:{}", addr, port),
+        })
+    }
+
+    pub fn handle_memfd(&mut self, pid: u32, ppid: u32, uid: u32, comm: &str) {
+        let state = self.get_or_create(pid, ppid, uid, comm);
+        state.has_memfd = true;
+    }
+
+    pub fn handle_execveat(&mut self, pid: u32, ppid: u32, uid: u32, comm: &str) -> Option<Alert> {
+        let state = self.states.get(&pid)?;
+
+        if !state.has_memfd {
+            return None;
+        }
+
+        Some(Alert {
+            rule_id: "PW-003".to_string(),
+            rule_name: "Fileless Execution via memfd".to_string(),
+            severity: "critical".to_string(),
+            pid,
+            ppid,
+            uid,
+            comm: comm.to_string(),
+            details: "execveat(AT_EMPTY_PATH) after memfd_create -- in-memory ELF execution"
+                .to_string(),
         })
     }
 

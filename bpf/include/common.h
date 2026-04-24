@@ -8,6 +8,8 @@ enum pw_event_type {
     PW_EVT_EXEC = 1,
     PW_EVT_CONNECT = 2,
     PW_EVT_DUP = 3,
+    PW_EVT_MEMFD = 4,
+    PW_EVT_EXECVEAT = 5,
 };
 
 
@@ -34,6 +36,16 @@ struct pw_event {
             __s32 oldfd;
             __s32 newfd;
         } dup;
+
+        struct {
+            __s32 fd;
+            __u32 flags;
+        } memfd;
+
+        struct {
+            __s32 dirfd;
+            __u32 flags;
+        } execveat;
     };
 };
 
