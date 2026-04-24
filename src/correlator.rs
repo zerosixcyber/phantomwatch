@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::collections::HashMap;
+use std::env;
 use std::net::Ipv4Addr;
 use std::time::Instant;
 
@@ -44,9 +45,15 @@ impl ProcessState {
 
 #[derive(Serialize)]
 pub struct Alert {
+    pub version: &'static str,
+    pub detector: &'static str,
+    pub detector_version: &'static str,
+    pub timestamp: String,
+    pub hostname: String,
     pub rule_id: String,
     pub rule_name: String,
     pub severity: String,
+    pub mitre: Vec<String>,
     pub pid: u32,
     pub ppid: u32,
     pub uid: u32,
@@ -137,9 +144,15 @@ impl Correlator {
         let (addr, port) = state.connect_addr.unwrap_or((Ipv4Addr::UNSPECIFIED, 0));
 
         Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
             rule_id: "PW-001".to_string(),
             rule_name: "Classic Reverse Shell".to_string(),
             severity: "critical".to_string(),
+            mitre: vec!["T1059.004".to_string()],
             pid,
             ppid,
             uid,
@@ -161,9 +174,15 @@ impl Correlator {
         }
 
         Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
             rule_id: "PW-003".to_string(),
             rule_name: "Fileless Execution via memfd".to_string(),
             severity: "critical".to_string(),
+            mitre: vec!["T1055.009".to_string()],
             pid,
             ppid,
             uid,
@@ -177,4 +196,10 @@ impl Correlator {
         let cutoff = Instant::now() - std::time::Duration::from_secs(self.ttl_seconds);
         self.states.retain(|_, s| s.last_seen > cutoff);
     }
+}
+
+fn gethostname() -> String {
+    nix::unistd::gethostname()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
 }
