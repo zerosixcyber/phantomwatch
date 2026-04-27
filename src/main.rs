@@ -199,6 +199,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", json);
                 }
             }
+            6 => {
+                let request = u32::from_le_bytes([
+                    event.payload[0],
+                    event.payload[1],
+                    event.payload[2],
+                    event.payload[3],
+                ]);
+                let target_pid = u32::from_le_bytes([
+                    event.payload[4],
+                    event.payload[5],
+                    event.payload[6],
+                    event.payload[7],
+                ]);
+
+                debug!(
+                    pid = event.pid,
+                    comm = comm,
+                    target_pid = target_pid,
+                    request = request,
+                    "ptrace event"
+                );
+
+                if let Some(alert) =
+                    corr.handle_ptrace(event.pid, event.ppid, event.uid, &comm, target_pid)
+                {
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json);
+                }
+            }
             _ => {}
         }
 

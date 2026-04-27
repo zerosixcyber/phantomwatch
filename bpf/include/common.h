@@ -10,6 +10,7 @@ enum pw_event_type {
     PW_EVT_DUP = 3,
     PW_EVT_MEMFD = 4,
     PW_EVT_EXECVEAT = 5,
+    PW_EVT_PTRACE = 6,
 };
 
 
@@ -47,6 +48,11 @@ struct pw_event {
             __s32 dirfd;
             __u32 flags;
         } execveat;
+
+        struct {
+            __u32 request;
+            __u32 target_pid;
+        } ptrace;
     };
 };
 

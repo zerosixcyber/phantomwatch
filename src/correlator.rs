@@ -12,6 +12,7 @@ pub struct ProcessState {
     pub comm: String,
     pub first_seen: Instant,
     pub last_seen: Instant,
+    pub ptrace_target: Option<u32>,
 
     pub has_external_connect: bool,
     pub connect_addr: Option<(Ipv4Addr, u16)>,
@@ -39,6 +40,7 @@ impl ProcessState {
             stderr_redirected: false,
             has_memfd: false,
             exec_on_memfd: false,
+            ptrace_target: None,
         }
     }
 }
@@ -209,6 +211,45 @@ impl Correlator {
             comm: comm.to_string(),
             details: "execveat(AT_EMPTY_PATH) after memfd_create -- in-memory ELF execution"
                 .to_string(),
+        })
+    }
+
+    pub fn handle_ptrace(
+        &mut self,
+        pid: u32,
+        ppid: u32,
+        uid: u32,
+        comm: &str,
+        target_pid: u32,
+    ) -> Option<Alert> {
+        let debuggers = ["gdb", "lldb", "strace", "ltrace", "perf"];
+
+        if debuggers.iter().any(|d| comm.starts_with(d)) {
+            return None;
+        }
+
+        if pid == target_pid {
+            return None;
+        }
+
+        let state = self.get_or_create(pid, ppid, uid, comm);
+        state.ptrace_target = Some(target_pid);
+
+        Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
+            rule_id: "PW-004".to_string(),
+            rule_name: "Process Injection via ptrace".to_string(),
+            severity: "high".to_string(),
+            mitre: vec!["T1055.008".to_string()],
+            pid,
+            ppid,
+            uid,
+            comm: comm.to_string(),
+            details: format!("ptrace ATTACH to pid{}", target_pid),
         })
     }
 

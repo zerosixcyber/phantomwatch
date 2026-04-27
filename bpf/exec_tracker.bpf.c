@@ -172,3 +172,33 @@ int handle_execveat(struct trace_event_raw_sys_enter *ctx)
     bpf_ringbuf_submit(e, 0);
     return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_ptrace")
+int handle_ptrace(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+    __u32 request = (__u32)ctx->args[0];
+
+    if (request != 16 && request != 0x4206)
+        return 0;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_PTRACE;
+    e->pid = bpf_get_current_pid_tgid() >> 32;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->ptrace.request = request;
+    e->ptrace.target_pid = (__u32)ctx->args[1];
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
