@@ -232,3 +232,40 @@ int handle_vm_writev(struct trace_event_raw_sys_enter *ctx)
     bpf_ringbuf_submit(e, 0);
     return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_openat")
+int handle_openat(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+    __u32 flags = (__u32)ctx->args[2];
+    char prefix[7] = {};
+
+    if ((flags & 3) == 0)
+        return 0;
+
+    bpf_probe_read_user_str(prefix, sizeof(prefix),
+        (const char *)ctx->args[1]);
+
+    if (prefix[0] != '/' || prefix[1] != 'p' || prefix[2] != 'r' || prefix[3] != 'o' || prefix[4] != 'c' || prefix[5] != '/')
+        return 0;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_FILE_OPEN;
+    e->pid = bpf_get_current_pid_tgid() >> 32;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    bpf_probe_read_user_str(e->file_open.path, sizeof(e->file_open.path), (const char *)ctx->args[1]);
+    e->file_open.flags = flags;
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}

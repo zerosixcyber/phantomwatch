@@ -279,6 +279,53 @@ impl Correlator {
         })
     }
 
+    pub fn handle_file_open(
+        &mut self,
+        pid: u32,
+        ppid: u32,
+        uid: u32,
+        comm: &str,
+        path: &str,
+    ) -> Option<Alert> {
+        // Check if path matches /proc/<pid>/mem
+        if !path.ends_with("/mem") {
+            return None;
+        }
+
+        // Extract target PID from path: /proc/<pid>/mem
+        let parts: Vec<&str> = path.split('/').collect();
+        if parts.len() < 4 || parts[1] != "proc" {
+            return None;
+        }
+
+        let target_pid: u32 = match parts[2].parse() {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
+
+        // Ignore self-access
+        if target_pid == pid {
+            return None;
+        }
+
+        Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
+            rule_id: "PW-006".to_string(),
+            rule_name: "/proc/pid/mem Write".to_string(),
+            severity: "high".to_string(),
+            mitre: vec!["T1055".to_string()],
+            pid,
+            ppid,
+            uid,
+            comm: comm.to_string(),
+            details: format!("write access to {} (target pid {})", path, target_pid),
+        })
+    }
+
     pub fn cleanup_stale(&mut self) {
         let cutoff = Instant::now() - std::time::Duration::from_secs(self.ttl_seconds);
         self.states.retain(|_, s| s.last_seen > cutoff);

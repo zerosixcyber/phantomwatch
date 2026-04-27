@@ -12,6 +12,7 @@ enum pw_event_type {
     PW_EVT_EXECVEAT = 5,
     PW_EVT_PTRACE = 6,
     PW_EVT_VM_WRITEV = 7,
+    PW_EVT_FILE_OPEN = 8,
 };
 
 
@@ -58,6 +59,11 @@ struct pw_event {
         struct {
             __u32 target_pid;
         } vm_writev;
+
+        struct {
+            char path[MAX_PATH_LEN];
+            __u32 flags;
+        } file_open;
     };
 };
 

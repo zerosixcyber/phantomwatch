@@ -250,6 +250,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", json);
                 }
             }
+            8 => {
+                let path = std::str::from_utf8(&event.payload[..256])
+                    .unwrap_or("?")
+                    .trim_end_matches('\0')
+                    .to_string();
+
+                debug!(pid = event.pid, comm = comm, path = path, "file_open event");
+
+                if let Some(alert) =
+                    corr.handle_file_open(event.pid, event.ppid, event.uid, &comm, &path)
+                {
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json);
+                }
+            }
             _ => {}
         }
 
