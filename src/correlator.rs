@@ -253,6 +253,32 @@ impl Correlator {
         })
     }
 
+    pub fn handle_vm_writev(
+        &mut self,
+        pid: u32,
+        ppid: u32,
+        uid: u32,
+        comm: &str,
+        target_pid: u32,
+    ) -> Option<Alert> {
+        Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
+            rule_id: "PW-005".to_string(),
+            rule_name: "Cross-Process Memory Write".to_string(),
+            severity: "high".to_string(),
+            mitre: vec!["T1055".to_string()],
+            pid,
+            ppid,
+            uid,
+            comm: comm.to_string(),
+            details: format!("process_vm_writev to pid {}", target_pid),
+        })
+    }
+
     pub fn cleanup_stale(&mut self) {
         let cutoff = Instant::now() - std::time::Duration::from_secs(self.ttl_seconds);
         self.states.retain(|_, s| s.last_seen > cutoff);

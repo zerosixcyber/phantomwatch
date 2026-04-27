@@ -202,3 +202,33 @@ int handle_ptrace(struct trace_event_raw_sys_enter *ctx)
     bpf_ringbuf_submit(e, 0);
     return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_process_vm_writev")
+int handle_vm_writev(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+    __u32 target_pid = (__u32)ctx->args[0];
+    __u32 self_pid = bpf_get_current_pid_tgid() >> 32;
+
+    if (target_pid == self_pid)
+        return 0;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_VM_WRITEV;
+    e->pid = self_pid;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->vm_writev.target_pid = target_pid;
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}

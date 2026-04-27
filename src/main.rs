@@ -228,6 +228,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", json);
                 }
             }
+            7 => {
+                let target_pid = u32::from_le_bytes([
+                    event.payload[0],
+                    event.payload[1],
+                    event.payload[2],
+                    event.payload[3],
+                ]);
+
+                debug!(
+                    pid = event.pid,
+                    comm = comm,
+                    target_pid = target_pid,
+                    "process_vm_writev event"
+                );
+
+                if let Some(alert) =
+                    corr.handle_vm_writev(event.pid, event.ppid, event.uid, &comm, target_pid)
+                {
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json);
+                }
+            }
             _ => {}
         }
 

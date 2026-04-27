@@ -11,6 +11,7 @@ enum pw_event_type {
     PW_EVT_MEMFD = 4,
     PW_EVT_EXECVEAT = 5,
     PW_EVT_PTRACE = 6,
+    PW_EVT_VM_WRITEV = 7,
 };
 
 
@@ -53,6 +54,10 @@ struct pw_event {
             __u32 request;
             __u32 target_pid;
         } ptrace;
+
+        struct {
+            __u32 target_pid;
+        } vm_writev;
     };
 };
 
