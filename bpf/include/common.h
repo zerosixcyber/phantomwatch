@@ -24,6 +24,7 @@ struct pw_event {
     union {
         struct {
             char filename[MAX_PATH_LEN];
+            char argv[MAX_PATH_LEN];
         } exec;
 
         struct {

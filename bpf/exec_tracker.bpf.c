@@ -36,6 +36,12 @@ int handle_execve(struct trace_event_raw_sys_enter *ctx)
 				sizeof(e->exec.filename),
 				(const char *)ctx->args[0]);
 
+	const char **argv_ptr = (const char **)ctx->args[1];
+	const char *arg2;
+	bpf_probe_read_user(&arg2, sizeof(arg2), &argv_ptr[2]);
+	if (arg2)
+	    bpf_probe_read_user_str(e->exec.argv, sizeof(e->exec.argv), arg2);
+
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }

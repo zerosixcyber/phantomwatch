@@ -46,7 +46,7 @@ struct PwEvent {
     ppid: u32,
     uid: u32,
     comm: [u8; 16],
-    payload: [u8; 256],
+    payload: [u8; 512],
 }
 
 unsafe impl Plain for PwEvent {}
@@ -126,6 +126,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or("?")
                     .trim_end_matches('\0')
                     .to_string();
+                let argv = std::str::from_utf8(&event.payload[256..512])
+                    .unwrap_or("")
+                    .trim_end_matches('\0')
+                    .to_string();
 
                 debug!(
                     pid = event.pid,
@@ -136,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
 
                 if let Some(alert) =
-                    corr.handle_exec(event.pid, event.ppid, event.uid, &comm, &filename)
+                    corr.handle_exec(event.pid, event.ppid, event.uid, &comm, &filename, &argv)
                 {
                     let json = serde_json::to_string(&alert).unwrap();
                     println!("{}", json)

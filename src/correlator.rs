@@ -114,7 +114,27 @@ impl Correlator {
         uid: u32,
         comm: &str,
         filename: &str,
+        argv: &str,
     ) -> Option<Alert> {
+        if argv.contains("/dev/tcp/") || argv.contains("/dev/udp") {
+            return Some(Alert {
+                version: "1.0",
+                detector: "phantomwatch",
+                detector_version: env!("CARGO_PKG_VERSION"),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                hostname: gethostname(),
+                rule_id: "PW-002".to_string(),
+                rule_name: "Bash /dev/tcp Reverse Shell".to_string(),
+                severity: "critical".to_string(),
+                mitre: vec!["T1059.004".to_string()],
+                pid,
+                ppid,
+                uid,
+                comm: comm.to_string(),
+                details: format!("execve with /dev/tcp in argv: {}", argv),
+            });
+        }
+
         let state = self.states.get(&pid)?;
 
         if !state.has_external_connect {
