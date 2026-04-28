@@ -247,7 +247,9 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx)
     bpf_probe_read_user_str(prefix, sizeof(prefix),
         (const char *)ctx->args[1]);
 
-    if (prefix[0] != '/' || prefix[1] != 'p' || prefix[2] != 'r' || prefix[3] != 'o' || prefix[4] != 'c' || prefix[5] != '/')
+    int is_proc = (prefix[0] == '/' && prefix[1] == 'p' && prefix[2] == 'r' && prefix[3] == 'o' && prefix[4] == 'c' && prefix[5] =='/');
+    int is_etc = (prefix[0] == '/' && prefix[1] == 'e' && prefix[2] == 't' && prefix[3] == 'c' && prefix[4] == '/');
+    if (!is_proc && !is_etc)
         return 0;
 
     e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);

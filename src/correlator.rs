@@ -287,6 +287,24 @@ impl Correlator {
         comm: &str,
         path: &str,
     ) -> Option<Alert> {
+        if path == "/etc/ld.so.preload" {
+            return Some(Alert {
+                version: "1.0",
+                detector: "phantomwatch",
+                detector_version: env!("CARGO_PKG_VERSION"),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                hostname: gethostname(),
+                rule_id: "PW-010".to_string(),
+                rule_name: "ld.so.preload Modification".to_string(),
+                severity: "high".to_string(),
+                mitre: vec!["T1574.006".to_string()],
+                pid,
+                ppid,
+                uid,
+                comm: comm.to_string(),
+                details: "write access to /etc/ld.so.preload".to_string(),
+            });
+        }
         // Check if path matches /proc/<pid>/mem
         if !path.ends_with("/mem") {
             return None;
