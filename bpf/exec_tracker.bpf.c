@@ -271,3 +271,38 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx)
     bpf_ringbuf_submit(e, 0);
     return 0;
 }
+
+SEC("tracepoint/syscalls/sys_enter_bpf")
+int handle_bpf(struct trace_event_raw_sys_enter *ctx)
+{
+    struct pw_event *e;
+    struct task_struct *task;
+    __u32 cmd = (__u32)ctx->args[0];
+
+    if (cmd != 5)
+        return 0;
+
+    __u32 self_pid = bpf_get_current_pid_tgid() >> 32;
+    char comm[16] = {};
+    bpf_get_current_comm(&comm, sizeof(comm));
+    if (comm[0] == 'p' && comm[1] == 'h' && comm[2] == 'a' && comm[3] == 'n' && comm[4] == 't' && comm[5] == 'o' && comm[6] == 'm')
+        return 0;
+
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->timestamp_ns = bpf_ktime_get_ns();
+    e->event_type = PW_EVT_BPF_LOAD;
+    e->pid = self_pid;
+    e->uid = bpf_get_current_uid_gid() & 0xFFFFFFFF;
+
+    task = (struct task_struct *)bpf_get_current_task();
+    e->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    __builtin_memcpy(e->comm, comm, 16);
+    e->bpf_load.cmd = cmd;
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}

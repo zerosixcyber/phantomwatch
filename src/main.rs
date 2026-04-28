@@ -265,6 +265,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", json);
                 }
             }
+            9 => {
+                debug!(pid = event.pid, comm = comm, "bpf program load event");
+
+                if let Some(alert) = corr.handle_bpf_load(event.pid, event.ppid, event.uid, &comm) {
+                    let json = serde_json::to_string(&alert).unwrap();
+                    println!("{}", json);
+                }
+            }
             _ => {}
         }
 

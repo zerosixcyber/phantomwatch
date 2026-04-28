@@ -13,6 +13,7 @@ enum pw_event_type {
     PW_EVT_PTRACE = 6,
     PW_EVT_VM_WRITEV = 7,
     PW_EVT_FILE_OPEN = 8,
+    PW_EVT_BPF_LOAD = 9,
 };
 
 
@@ -64,6 +65,11 @@ struct pw_event {
             char path[MAX_PATH_LEN];
             __u32 flags;
         } file_open;
+
+        struct {
+            __u32 cmd;
+            __u32 prog_type;
+        } bpf_load;
     };
 };
 

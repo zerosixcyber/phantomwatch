@@ -344,6 +344,25 @@ impl Correlator {
         })
     }
 
+    pub fn handle_bpf_load(&mut self, pid: u32, ppid: u32, uid: u32, comm: &str) -> Option<Alert> {
+        Some(Alert {
+            version: "1.0",
+            detector: "phantomwatch",
+            detector_version: env!("CARGO_PKG_VERSION"),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            hostname: gethostname(),
+            rule_id: "PW-009".to_string(),
+            rule_name: "BPF Program Load".to_string(),
+            severity: "medium".to_string(),
+            mitre: vec!["T1014".to_string()],
+            pid,
+            ppid,
+            uid,
+            comm: comm.to_string(),
+            details: "BPF program loaded by unexpected process".to_string(),
+        })
+    }
+
     pub fn cleanup_stale(&mut self) {
         let cutoff = Instant::now() - std::time::Duration::from_secs(self.ttl_seconds);
         self.states.retain(|_, s| s.last_seen > cutoff);
